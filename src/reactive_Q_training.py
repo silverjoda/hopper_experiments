@@ -21,6 +21,9 @@ def train_qnet(qnet,
                                             scaler,
                                             animate=False)
 
+        if len(observes) <= 2*batchsize:
+            continue
+
         mse = qnet.train(observes, actions, rewards, batchsize)
         print("Episode {}/{}, mse: {}".format(i, n_episodes, mse))
 
@@ -29,8 +32,8 @@ def main():
 
     RESTORE_QNET = False
     TRAIN = True
-    VISUALIZE_QNET = True
     VISUALIZE_MASTER = False
+    VISUALIZE_QNET = True
 
     # Open AI gym environment
     env, obs_dim, act_dim = init_gym('Hopper-v1')
@@ -57,7 +60,7 @@ def main():
                     masterpolicy,
                     env,
                     scaler,
-                    n_episodes=300,
+                    n_episodes=500,
                     batchsize=64)
         print("Training time taken: {}".format(time.time() - t1))
         qnet.save_weights()

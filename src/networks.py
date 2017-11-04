@@ -743,7 +743,7 @@ class SimpleQNet:
             # Make policy
             self.Q = self._qnet(self.obs_ph, self.act_ph)
 
-            self.lr = 5e-4
+            self.lr = 1e-3
             self.tderr = tf.losses.mean_squared_error(self.Q, self.y_ph)
             self.optim = tf.train.AdamOptimizer(self.lr).minimize(self.tderr)
             self.act_q_grad = tf.gradients(self.Q, self.act_ph)
@@ -768,6 +768,7 @@ class SimpleQNet:
 
     def train(self, observes, actions, rewards, batchsize=32):
         N = len(observes)
+        assert N > batchsize
 
         total_loss = 0
         for i in range(int(N/batchsize)):
@@ -821,11 +822,11 @@ class SimpleQNet:
                 env.render()
 
                 action = np.random.rand(self.act_dim)
-                for i in range(100):
+                for i in range(75):
                     fd = {self.obs_ph : np.expand_dims(obs, 0),
                           self.act_ph : np.expand_dims(action, 0)}
-                    grad = self.sess.run(self.act_q_grad, feed_dict=fd)[0]
-                    action += grad[0]
+                    grad = self.sess.run(self.act_q_grad, feed_dict=fd)[0][0]
+                    action += 0.01*grad
 
                 obs, _, done, _ = env.step(action)
 
