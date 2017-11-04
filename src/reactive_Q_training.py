@@ -57,8 +57,8 @@ def main():
                     masterpolicy,
                     env,
                     scaler,
-                    n_episodes=100,
-                    batchsize=32)
+                    n_episodes=300,
+                    batchsize=64)
         print("Training time taken: {}".format(time.time() - t1))
         qnet.save_weights()
         print("Saved qnet weights")

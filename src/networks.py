@@ -746,6 +746,7 @@ class SimpleQNet:
             self.lr = 5e-4
             self.tderr = tf.losses.mean_squared_error(self.Q, self.y_ph)
             self.optim = tf.train.AdamOptimizer(self.lr).minimize(self.tderr)
+            self.act_q_grad = tf.gradients(self.Q, self.act_ph)
 
             self.init = tf.global_variables_initializer()
 
@@ -772,32 +773,30 @@ class SimpleQNet:
         for i in range(int(N/batchsize)):
 
             # Sample batch of s, a, r, _s
-            rndvec = np.random.choice(N, batchsize, replace=False)
+            rndvec = np.random.choice(N - 1, batchsize, replace=False)
 
             observes_batch = observes[rndvec]
             actions_batch = actions[rndvec]
             rewards_batch = rewards[rndvec]
             observes_new_batch = observes[rndvec + 1]
+            actions_new_batch = actions[rndvec + 1]
 
-            y_hat = None
+            q_target = self.predict_Q(observes_new_batch, actions_new_batch)
+            y_hat = np.expand_dims(rewards_batch,1) + self.gamma * q_target
 
-            for i in range(0, len(observes) - batchsize, batchsize):
-                fd = {self.obs_ph : observes[i:i + batchsize],
-                      self.act_ph : actions[i:i + batchsize],
-                      self.y_ph : y_hat}
-                loss, _ = self.sess.run([self.tderr, self.optim], feed_dict=fd)
-                total_loss += loss
+            fd = {self.obs_ph : observes_batch,
+                  self.act_ph : actions_batch,
+                  self.y_ph : y_hat}
+
+            loss, _ = self.sess.run([self.tderr, self.optim], feed_dict=fd)
+            total_loss += loss
 
         return total_loss/(int(N/batchsize))
 
 
-    def predict(self, obs):
-        return self.sess.run(self.output, feed_dict={self.obs_ph : obs})
-
-
-    def evaluate(self, observes, actions):
-        return self.sess.run(self.mse, feed_dict={self.obs_ph: observes,
-                                                   self.act_ph: actions})
+    def predict_Q(self, obs, act):
+        return self.sess.run(self.Q, feed_dict={self.obs_ph : obs,
+                                                self.act_ph : act})
 
 
     def save_weights(self):
@@ -820,6 +819,13 @@ class SimpleQNet:
 
             while not done:
                 env.render()
-                action = self.predict(np.expand_dims(obs, axis=0))[0]
+
+                action = np.random.rand(self.act_dim)
+                for i in range(100):
+                    fd = {self.obs_ph : np.expand_dims(obs, 0),
+                          self.act_ph : np.expand_dims(action, 0)}
+                    grad = self.sess.run(self.act_q_grad, feed_dict=fd)[0]
+                    action += grad[0]
+
                 obs, _, done, _ = env.step(action)
 
