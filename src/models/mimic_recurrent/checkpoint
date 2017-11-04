@@ -1,0 +1,2 @@
+model_checkpoint_path: "/home/shagas/Data/SW/RL_ALGOS/trpo/src/models/mimic_recurrent/trained_model"
+all_model_checkpoint_paths: "/home/shagas/Data/SW/RL_ALGOS/trpo/src/models/mimic_recurrent/trained_model"
