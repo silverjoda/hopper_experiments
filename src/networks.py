@@ -729,6 +729,7 @@ class SimpleQNet:
         self.obs_dim = obs_dim
         self.act_dim = act_dim
         self.gamma = gamma
+        self.Q_max = 0
 
         self.weights_path = 'models/qnet'
         if not os.path.exists(self.weights_path):
@@ -741,12 +742,23 @@ class SimpleQNet:
             self.y_ph = tf.placeholder(tf.float32, (None, 1), 'y')
 
             # Make policy
-            self.Q = self._qnet(self.obs_ph, self.act_ph)
+            self.Q = self._qnet(self.obs_ph, self.act_ph, reuse=False)
 
             self.lr = 1e-3
             self.tderr = tf.losses.mean_squared_error(self.Q, self.y_ph)
             self.optim = tf.train.AdamOptimizer(self.lr).minimize(self.tderr)
-            self.act_q_grad = tf.gradients(self.Q, self.act_ph)
+
+            self.opt_act = tfl.variable("opt_act", shape=(act_dim))
+            self.Q_opt = self._qnet(self.obs_ph, tf.expand_dims(self.opt_act, 0), reuse=True)
+            self.init_act_rnd = tf.assign(self.opt_act, tf.random_normal(tf.shape(self.opt_act)))
+            self.init_act_zero = tf.assign(self.opt_act, tf.zeros(tf.shape(self.opt_act)))
+            self.optimize_action = tf.train.AdamOptimizer(1e-3).minimize(-self.Q_opt, var_list=self.opt_act)
+
+            self.rnd_acts = tf.random_uniform((1000, self.act_dim), minval=-2, maxval= 2)
+            self.rnd_acts = tf.random_normal((1000, self.act_dim))
+            self.Q_max = self._qnet(self.obs_ph, self.rnd_acts, reuse=True)
+            self.qmax = tf.reduce_max(self.Q_max)
+            self.actmax = self.rnd_acts[tf.arg_max(self.Q_max, 0)]
 
             self.init = tf.global_variables_initializer()
 
@@ -758,11 +770,13 @@ class SimpleQNet:
         self.sess.run(self.init)
 
 
-    def _qnet(self, obs_ph, act_ph):
-        input = tf.concat([obs_ph, act_ph], 1)
-        fc1 = tfl.fully_connected(input, 32, 'tanh', weights_init='xavier')
-        fc2 = tfl.fully_connected(fc1, 32, 'tanh', weights_init='xavier')
-        fc3 = tfl.fully_connected(fc2, 1, 'tanh', weights_init='xavier')
+    def _qnet(self, obs_ph, act_ph, reuse=False):
+        with tf.variable_scope("qnet", reuse=reuse):
+            input = tf.concat([obs_ph, act_ph], 1)
+            w_init = tfl.initializations.xavier()
+            fc1 = tfl.fully_connected(input, 64, 'tanh', weights_init=w_init)
+            fc2 = tfl.fully_connected(fc1, 64, 'tanh', weights_init=w_init)
+            fc3 = tfl.fully_connected(fc2, 1, 'linear', weights_init=w_init)
         return fc3
 
 
@@ -770,11 +784,11 @@ class SimpleQNet:
         N = len(observes)
         assert N > batchsize
 
-        total_loss = 0
+        total_loss = 0.
         for i in range(int(N/batchsize)):
 
             # Sample batch of s, a, r, _s
-            rndvec = np.random.choice(N - 1, batchsize, replace=False)
+            rndvec = np.random.choice(N - 2, batchsize, replace=False)
 
             observes_batch = observes[rndvec]
             actions_batch = actions[rndvec]
@@ -783,14 +797,18 @@ class SimpleQNet:
             actions_new_batch = actions[rndvec + 1]
 
             q_target = self.predict_Q(observes_new_batch, actions_new_batch)
-            y_hat = np.expand_dims(rewards_batch,1) + self.gamma * q_target
+            y_hat = np.expand_dims(rewards_batch, 1) + self.gamma * q_target
 
             fd = {self.obs_ph : observes_batch,
                   self.act_ph : actions_batch,
                   self.y_ph : y_hat}
 
-            loss, _ = self.sess.run([self.tderr, self.optim], feed_dict=fd)
+            Q, loss, _ = self.sess.run([self.Q, self.tderr, self.optim], feed_dict=fd)
             total_loss += loss
+
+            if np.max(Q) > self.Q_max + 3:
+                self.Q_max = np.max(Q)
+                print("Max Q: {}".format(self.Q_max))
 
         return total_loss/(int(N/batchsize))
 
@@ -812,21 +830,37 @@ class SimpleQNet:
             saver.restore(self.sess, tf.train.latest_checkpoint(self.weights_path))
 
 
-    def visualize(self, env, n_episodes=3):
+    def get_act(self, obs):
+        # action = np.random.rand(self.act_dim)
+        # for i in range(300):
+        #     fd = {self.obs_ph: np.expand_dims(obs, 0),
+        #           self.act_ph: np.expand_dims(action, 0)}
+        #     grad = self.sess.run(self.act_q_grad, feed_dict=fd)[0][0]
+        #     action += 0.1 * grad
 
+        # Initialize action
+        self.sess.run([self.init_act_rnd])
+
+        # Optimize
+        for i in range(200):
+            self.sess.run(self.optimize_action, {self.obs_ph : np.expand_dims(obs,0)})
+
+        # Get variable value
+        action = self.sess.run(self.opt_act)
+        return action
+
+
+    def get_act_sampling(self, obs):
+        return  self.sess.run(self.actmax,
+                               {self.obs_ph : np.expand_dims(obs, 0)})
+
+
+    def visualize(self, env, n_episodes=5):
         for i in range(n_episodes):
             obs = env.reset()
             done = False
 
             while not done:
                 env.render()
-
-                action = np.random.rand(self.act_dim)
-                for i in range(75):
-                    fd = {self.obs_ph : np.expand_dims(obs, 0),
-                          self.act_ph : np.expand_dims(action, 0)}
-                    grad = self.sess.run(self.act_q_grad, feed_dict=fd)[0][0]
-                    action += 0.01*grad
-
-                obs, _, done, _ = env.step(action)
+                obs, _, done, _ = env.step(self.get_act_sampling(obs))
 
