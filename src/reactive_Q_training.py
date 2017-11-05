@@ -48,7 +48,7 @@ def main():
 
     print("Loaded masterpolicy. ")
 
-    qnet = SimpleQNet(obs_dim, act_dim, 0.9)
+    qnet = SimpleQNet(obs_dim, act_dim, 0.97)
 
     if RESTORE_QNET:
         qnet.restore_weights()
@@ -61,7 +61,7 @@ def main():
                     env,
                     scaler,
                     n_episodes=10000,
-                    batchsize=64)
+                    batchsize=20)
         print("Training time taken: {}".format(time.time() - t1))
         qnet.save_weights()
         print("Saved qnet weights")

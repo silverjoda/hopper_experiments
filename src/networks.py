@@ -737,7 +737,6 @@ class SimpleQNet:
 
         self.g = tf.Graph()
         with self.g.as_default():
-            self.init = tf.global_variables_initializer()
 
             self.obs_ph = tf.placeholder(tf.float32, (None, self.obs_dim), 'obs')
             self.act_ph = tf.placeholder(tf.float32, (None, self.act_dim), 'act')
@@ -757,6 +756,8 @@ class SimpleQNet:
             self.init_act_zero = tf.assign(self.opt_act, tf.zeros(tf.shape(self.opt_act)))
             self.optimize_action = tf.train.AdamOptimizer(5e-3).minimize(-self.Q_opt, var_list=self.opt_act)
 
+            self.init = tf.global_variables_initializer()      
+
         config = tf.ConfigProto(
             device_count={'GPU': 0}
         )
@@ -769,8 +770,10 @@ class SimpleQNet:
         with tf.variable_scope("qnet", reuse=reuse):
             input = tf.concat([obs_ph, act_ph], 1)
             w_init = tfl.initializations.xavier()
-            fc1 = tfl.fully_connected(input, 64, 'tanh', weights_init=w_init)
-            fc2 = tfl.fully_connected(fc1, 64, 'tanh', weights_init=w_init)
+            fc1 = tfl.fully_connected(input, 96, 'leaky_relu', weights_init=w_init)
+            fc1 = tfl.dropout(fc1, keep_prob=0.7)
+            fc2 = tfl.fully_connected(fc1, 96, 'leaky_relu', weights_init=w_init)
+            fc2 = tfl.dropout(fc2, keep_prob=0.7)
             fc3 = tfl.fully_connected(fc2, 1, 'linear', weights_init=w_init)
         return fc3
 
@@ -783,13 +786,16 @@ class SimpleQNet:
         for i in range(int(N/batchsize)):
 
             # Sample batch of s, a, r, _s
-            rndvec = np.random.choice(N - 2, batchsize, replace=False)
+            rndvec = np.random.choice(min(N - 2, 120), batchsize, replace=False)
 
             observes_batch = observes[rndvec]
             actions_batch = actions[rndvec]
             rewards_batch = rewards[rndvec]
             observes_new_batch = observes[rndvec + 1]
             actions_new_batch = actions[rndvec + 1]
+
+            # Scale rewards
+            rewards_batch *= 0.5
 
             q_target = self.predict_Q(observes_new_batch, actions_new_batch)
             y_hat = np.expand_dims(rewards_batch, 1) + self.gamma * q_target
@@ -834,10 +840,10 @@ class SimpleQNet:
         #     action += 0.1 * grad
 
         # Initialize action
-        self.sess.run([self.init_act_zero])
+        self.sess.run([self.init_act_rnd])
 
         # Optimize
-        for i in range(200):
+        for i in range(300):
             self.sess.run(self.optimize_action, {self.obs_ph : np.expand_dims(obs,0)})
 
         # Get variable value
