@@ -214,7 +214,7 @@ class Policy(object):
                     '_lr_multiplier': self.lr_multiplier})
 
     def visualize(self, env, n_episodes=3):
-
+        max_act = np.zeros(self.act_dim)
         for i in range(n_episodes):
             obs = env.reset()
             done = False
@@ -223,6 +223,10 @@ class Policy(object):
                 env.render()
                 action = self.sample(np.expand_dims(obs, axis=0))[0]
                 obs, _, done, _ = env.step(action)
+                #
+                # if np.max(np.abs(action)) > np.max(np.abs(max_act)):
+                #     max_act = action
+                #     print(action)
 
     def close_sess(self):
         """ Close TensorFlow session """

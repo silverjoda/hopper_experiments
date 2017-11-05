@@ -737,6 +737,8 @@ class SimpleQNet:
 
         self.g = tf.Graph()
         with self.g.as_default():
+            self.init = tf.global_variables_initializer()
+
             self.obs_ph = tf.placeholder(tf.float32, (None, self.obs_dim), 'obs')
             self.act_ph = tf.placeholder(tf.float32, (None, self.act_dim), 'act')
             self.y_ph = tf.placeholder(tf.float32, (None, 1), 'y')
@@ -748,19 +750,12 @@ class SimpleQNet:
             self.tderr = tf.losses.mean_squared_error(self.Q, self.y_ph)
             self.optim = tf.train.AdamOptimizer(self.lr).minimize(self.tderr)
 
+            # Optimization action
             self.opt_act = tfl.variable("opt_act", shape=(act_dim))
             self.Q_opt = self._qnet(self.obs_ph, tf.expand_dims(self.opt_act, 0), reuse=True)
             self.init_act_rnd = tf.assign(self.opt_act, tf.random_normal(tf.shape(self.opt_act)))
             self.init_act_zero = tf.assign(self.opt_act, tf.zeros(tf.shape(self.opt_act)))
-            self.optimize_action = tf.train.AdamOptimizer(1e-3).minimize(-self.Q_opt, var_list=self.opt_act)
-
-            self.rnd_acts = tf.random_uniform((1000, self.act_dim), minval=-2, maxval= 2)
-            self.rnd_acts = tf.random_normal((1000, self.act_dim))
-            self.Q_max = self._qnet(self.obs_ph, self.rnd_acts, reuse=True)
-            self.qmax = tf.reduce_max(self.Q_max)
-            self.actmax = self.rnd_acts[tf.arg_max(self.Q_max, 0)]
-
-            self.init = tf.global_variables_initializer()
+            self.optimize_action = tf.train.AdamOptimizer(5e-3).minimize(-self.Q_opt, var_list=self.opt_act)
 
         config = tf.ConfigProto(
             device_count={'GPU': 0}
@@ -839,7 +834,7 @@ class SimpleQNet:
         #     action += 0.1 * grad
 
         # Initialize action
-        self.sess.run([self.init_act_rnd])
+        self.sess.run([self.init_act_zero])
 
         # Optimize
         for i in range(200):
@@ -847,20 +842,31 @@ class SimpleQNet:
 
         # Get variable value
         action = self.sess.run(self.opt_act)
-        return action
+        qval = self.sess.run(self.Q, {self.obs_ph : np.expand_dims(obs,0),
+                                      self.act_ph : np.expand_dims(action,0)})
+        return action, qval
 
 
     def get_act_sampling(self, obs):
-        return  self.sess.run(self.actmax,
-                               {self.obs_ph : np.expand_dims(obs, 0)})
+        N = 50000
+        rnd_acts = np.random.rand(N, self.act_dim)*5 - 2.5
+        #rnd_acts = np.random.randn(N, self.act_dim)*2
+        Q_rnd = self.sess.run(self.Q, {self.act_ph: rnd_acts,
+                                       self.obs_ph : np.tile(obs, [N, 1])})
+        max_Q = np.max(Q_rnd)
+        min_Q = np.min(Q_rnd)
+        act = rnd_acts[np.argmax(Q_rnd)]
+        return act, max_Q, min_Q
 
 
     def visualize(self, env, n_episodes=5):
         for i in range(n_episodes):
             obs = env.reset()
-            done = False
 
-            while not done:
+            for i in range(200):
                 env.render()
-                obs, _, done, _ = env.step(self.get_act_sampling(obs))
+                #act, max_q = self.get_act(obs)
+                act, max_q, min_q = self.get_act_sampling(obs)
+                print(act, max_q, min_q)
+                obs, _, done, _ = env.step(act)
 
