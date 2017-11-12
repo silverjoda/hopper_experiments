@@ -5,6 +5,7 @@ Written by Patrick Coady (pat-coady.github.io)
 """
 
 import tensorflow as tf
+import tflearn as tfl
 import numpy as np
 from sklearn.utils import shuffle
 
@@ -61,9 +62,12 @@ class NNValueFunction(object):
             self.loss = tf.reduce_mean(tf.square(self.out - self.val_ph))  # squared loss
             optimizer = tf.train.AdamOptimizer(self.lr)
             self.train_op = optimizer.minimize(self.loss)
+
+
             self.init = tf.global_variables_initializer()
         self.sess = tf.Session(graph=self.g)
         self.sess.run(self.init)
+
 
     def fit(self, x, y, logger):
         """ Fit model to current data batch + previous data batch

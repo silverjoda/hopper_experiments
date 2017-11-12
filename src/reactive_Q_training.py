@@ -30,7 +30,7 @@ def train_qnet(qnet,
 
 def main():
 
-    RESTORE_QNET = True
+    RESTORE_QNET = False
     TRAIN = False
     VISUALIZE_MASTER = False
     VISUALIZE_QNET = True
@@ -48,7 +48,7 @@ def main():
 
     print("Loaded masterpolicy. ")
 
-    qnet = SimpleQNet(obs_dim, act_dim, 0.97)
+    qnet = SimpleQNet(obs_dim, act_dim, 0.95)
 
     if RESTORE_QNET:
         qnet.restore_weights()
@@ -60,7 +60,7 @@ def main():
                     masterpolicy,
                     env,
                     scaler,
-                    n_episodes=10000,
+                    n_episodes=1000,
                     batchsize=20)
         print("Training time taken: {}".format(time.time() - t1))
         qnet.save_weights()
@@ -69,7 +69,11 @@ def main():
     if VISUALIZE_QNET:
         # Visualise the policy
         print("Visualizing qnet policy")
-        qnet.visualize(env)
+        #qnet.visualize(env)
+        qnet.comparemaster(env, masterpolicy, scaler)
+
+
+
 
 
 if __name__ == '__main__':

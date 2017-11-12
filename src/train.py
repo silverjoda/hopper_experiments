@@ -104,7 +104,7 @@ def run_episode(env, policy, scaler, animate=False):
         action = policy.sample(obs).reshape((1, -1)).astype(np.float32)
 
         # Add noise to action
-        action += np.random.randn(1,3)*1
+        #action += np.random.randn(1,3)*1
         #
 
         actions.append(action)

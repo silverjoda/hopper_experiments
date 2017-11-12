@@ -786,7 +786,7 @@ class SimpleQNet:
         for i in range(int(N/batchsize)):
 
             # Sample batch of s, a, r, _s
-            rndvec = np.random.choice(min(N - 2, 120), batchsize, replace=False)
+            rndvec = np.random.choice(N - 2, batchsize, replace=False)
 
             observes_batch = observes[rndvec]
             actions_batch = actions[rndvec]
@@ -832,12 +832,6 @@ class SimpleQNet:
 
 
     def get_act(self, obs):
-        # action = np.random.rand(self.act_dim)
-        # for i in range(300):
-        #     fd = {self.obs_ph: np.expand_dims(obs, 0),
-        #           self.act_ph: np.expand_dims(action, 0)}
-        #     grad = self.sess.run(self.act_q_grad, feed_dict=fd)[0][0]
-        #     action += 0.1 * grad
 
         # Initialize action
         self.sess.run([self.init_act_rnd])
@@ -854,7 +848,7 @@ class SimpleQNet:
 
 
     def get_act_sampling(self, obs):
-        N = 50000
+        N = 10000
         rnd_acts = np.random.rand(N, self.act_dim)*5 - 2.5
         #rnd_acts = np.random.randn(N, self.act_dim)*2
         Q_rnd = self.sess.run(self.Q, {self.act_ph: rnd_acts,
@@ -875,4 +869,20 @@ class SimpleQNet:
                 act, max_q, min_q = self.get_act_sampling(obs)
                 print(act, max_q, min_q)
                 obs, _, done, _ = env.step(act)
+
+    def comparemaster(self, env, masterpolicy, scaler):
+        from train import run_episode
+        for i in range(1):
+            observes, actions, rewards, _ = run_episode(env,
+                                                        masterpolicy,
+                                                        scaler,
+                                                        animate=False)
+
+            for o,a,r in zip(observes, actions, rewards):
+                # act, max_q = self.get_act(obs)
+                act, max_q, min_q = self.get_act_sampling(o)
+                oracle_act_q = self.sess.run(self.Q, {self.obs_ph:np.expand_dims(o, 0),
+                                                      self.act_ph: np.expand_dims(a, 0)})[0][0]
+
+                print("Oracle act,q : {},{}.  argmax(Q),max(Q): {},{}".format(a, oracle_act_q, act, max_q))
 
